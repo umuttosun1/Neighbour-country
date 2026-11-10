@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>HUDUT — sınırdan sınıra</title>
+<meta name="description" content="Dünya haritasında ülkeleri ve kara komşularını keşfet, her gün iki ülke arasındaki sınır zincirini kur." />
+<meta name="theme-color" content="#070b13" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230c1524'/%3E%3Ccircle cx='9' cy='22' r='3.4' fill='%23e8a33d'/%3E%3Ccircle cx='23' cy='10' r='3.4' fill='%233fd6b0'/%3E%3Cpath d='M9 22 Q10 12 23 10' stroke='%23d9b06a' stroke-width='1.6' fill='none' stroke-dasharray='2.5 2.5'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-glyph" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="8" cy="23" r="3.6"/><circle cx="24" cy="9" r="3.6" class="g2"/>
+        <path d="M8 23 Q9 12 24 9" fill="none"/>
+      </svg>
+      <div class="brand-text">
+        <h1>HUDUT</h1>
+        <p>sınırdan sınıra</p>
+      </div>
+    </div>
+    <div class="mode-tabs" role="tablist" aria-label="Mod">
+      <button type="button" role="tab" class="mode-tab" data-mode="game" aria-selected="true">Günlük oyun</button>
+      <button type="button" role="tab" class="mode-tab" data-mode="explore" aria-selected="false">Keşfet</button>
+    </div>
+    <nav class="topbar-actions">
+      <button type="button" id="btn-help" class="icon-btn" title="Nasıl oynanır">?</button>
+      <button type="button" id="btn-stats" class="icon-btn" title="İstatistikler">◔</button>
+    </nav>
+  </header>
+
+  <main class="stage">
+
+    <section class="mapwrap" id="mapwrap">
+      <svg id="map" role="img" aria-label="Dünya haritası"></svg>
+
+      <div class="map-overlay">
+        <div class="legend" id="legend-explore" hidden>
+          <span><i class="sw sw-sel"></i>seçili ülke</span>
+          <span><i class="sw sw-nb"></i>kara komşusu</span>
+          <span><i class="sw sw-start"></i>rota başı</span>
+          <span><i class="sw sw-path"></i>rota üstü</span>
+          <span><i class="sw sw-end"></i>rota sonu</span>
+        </div>
+        <div class="legend" id="legend">
+          <span><i class="sw sw-start"></i>başlangıç</span>
+          <span><i class="sw sw-end"></i>hedef</span>
+          <span><i class="sw sw-warm"></i>başlangıca bağlı</span>
+          <span><i class="sw sw-cool"></i>hedefe bağlı</span>
+          <span><i class="sw sw-loose"></i>boşta</span>
+        </div>
+        <div class="zoomers">
+          <button type="button" data-zoom="in"  title="Yakınlaş">+</button>
+          <button type="button" data-zoom="out" title="Uzaklaş">−</button>
+          <button type="button" data-zoom="fit" title="Seçime odakla">◎</button>
+          <button type="button" data-zoom="world" title="Tüm dünya">⤢</button>
+        </div>
+      </div>
+
+      <div class="map-tip" id="map-tip" hidden></div>
+      <div class="toast" id="toast" hidden></div>
+    </section>
+
+    <aside class="panel" id="panel-game">
+
+      <div class="route-card">
+        <div class="puzzle-meta"><span id="puzzle-date"></span><span id="puzzle-no"></span></div>
+
+        <div class="route">
+          <div class="endpoint is-start">
+            <span class="flag" id="start-flag"></span>
+            <span class="ep-name" id="start-name">—</span>
+          </div>
+          <div class="route-link">
+            <span class="dots" aria-hidden="true"></span>
+            <span class="gap" id="gap-label">?</span>
+            <span class="dots" aria-hidden="true"></span>
+          </div>
+          <div class="endpoint is-end">
+            <span class="flag" id="end-flag"></span>
+            <span class="ep-name" id="end-name">—</span>
+          </div>
+        </div>
+
+        <div class="meter" id="meter" aria-label="Kalan tahmin"></div>
+      </div>
+
+      <form class="guess-form" id="guess-form" autocomplete="off">
+        <div class="input-shell">
+          <input id="guess-input" type="text" placeholder="Bir ülke yaz…"
+                 aria-label="Ülke tahmini" autocomplete="off" autocorrect="off"
+                 spellcheck="false" enterkeyhint="go" />
+          <button type="submit" class="submit-btn" title="Tahmin et">⏎</button>
+        </div>
+        <ul class="suggestions" id="suggestions" hidden></ul>
+      </form>
+
+      <p class="status" id="status"></p>
+
+      <ol class="guess-list" id="guess-list"></ol>
+
+      <div class="panel-actions">
+        <button type="button" id="btn-hint" class="ghost">İpucu <em>(1 tahmin)</em></button>
+        <button type="button" id="btn-random" class="ghost">Rastgele oyun</button>
+        <button type="button" id="btn-giveup" class="ghost danger">Pes et</button>
+      </div>
+
+    </aside>
+
+    <aside class="panel" id="panel-explore" hidden>
+      <form class="guess-form" id="ex-form" autocomplete="off">
+        <div class="input-shell">
+          <input id="ex-input" type="text" placeholder="Bir ülke ara…"
+                 aria-label="Ülke ara" autocomplete="off" autocorrect="off"
+                 spellcheck="false" enterkeyhint="search" />
+          <button type="submit" class="submit-btn" title="Ara">⏎</button>
+        </div>
+        <ul class="suggestions" id="ex-sugg" hidden></ul>
+      </form>
+
+      <div id="ex-card"></div>
+
+      <section class="ex-route route-card" id="ex-route" hidden>
+        <h3 class="ex-subhead">Kara yolu ve karşılaştırma</h3>
+        <p class="ex-from"><span id="ex-from"></span> <span class="arrow">→</span></p>
+        <form class="guess-form" id="ex-to-form" autocomplete="off">
+          <div class="input-shell">
+            <input id="ex-to" type="text" placeholder="Bir ülke seç: rota + karşılaştırma…"
+                   aria-label="Hedef ülke" autocomplete="off" autocorrect="off" spellcheck="false" />
+            <button type="submit" class="submit-btn" title="Rotayı bul">⏎</button>
+          </div>
+          <ul class="suggestions" id="ex-to-sugg" hidden></ul>
+        </form>
+        <div id="ex-route-out"></div>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <button type="button" class="modal-close" id="modal-close" aria-label="Kapat">×</button>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="assets/js/vendor/d3-array.min.js"></script>
+<script src="assets/js/vendor/d3-geo.min.js"></script>
+<script src="assets/js/vendor/topojson-client.min.js"></script>
+<script src="assets/js/data/world.js"></script>
+<script src="assets/js/data/countries.js"></script>
+<script src="assets/js/graph.js"></script>
+<script src="assets/js/map.js"></script>
+<script src="assets/js/game.js"></script>
+<script src="assets/js/explore.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
