@@ -3,7 +3,7 @@
  *
  * Girdi  : tools/raw/countries-50m.json   (Natural Earth 50m, TopoJSON)
  *          tools/raw/mledoze-countries.json (ülke adları + kara sınırları)
- *          tools/raw/worldbank-population.json (Dünya Bankası SP.POP.TOTL, son yıl)
+ *          tools/raw/worldbank.json      (Dünya Bankası göstergeleri — fetch-worldbank.mjs)
  * Çıktı  : assets/js/data/world.js      -> window.WORLD_TOPO
  *          assets/js/data/countries.js  -> window.COUNTRY_DATA
  *
@@ -150,20 +150,40 @@ const log = (...a) => console.log(...a);
 const topo = raw('countries-50m.json');
 const mledoze = raw('mledoze-countries.json');
 
-// Nüfus: https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=400&mrnev=1
+// Dünya Bankası göstergeleri: tools/fetch-worldbank.mjs ile indirilir.
 // Dünya Bankası Kosova için XKX kullanıyor; bizim veri setimizde UNK.
 const WB_CODE_FIX = { XKX: 'UNK' };
-const population = new Map();
+// gösterge kodu -> countries.js'teki kısa ad
+const WB_FIELDS = {
+  'NY.GDP.MKTP.CD': 'gdp',
+  'NY.GDP.PCAP.CD': 'gdpPc',
+  'SP.DYN.LE00.IN': 'life',
+  'SP.DYN.TFRT.IN': 'fert',
+  'SP.URB.TOTL.IN.ZS': 'urban',
+  'SL.UEM.TOTL.ZS': 'unemp',
+  'FP.CPI.TOTL.ZG': 'infl',
+  'IT.NET.USER.ZS': 'net',
+  'EN.GHG.CO2.PC.CE.AR5': 'co2',
+  'AG.LND.FRST.ZS': 'forest',
+  'ST.INT.ARVL': 'tour',
+};
+const worldBank = new Map(); // ISO3 -> { pop: [v, y], gdp: [v, y], ... }
 {
-  const file = path.join(ROOT, 'tools/raw/worldbank-population.json');
+  const file = path.join(ROOT, 'tools/raw/worldbank.json');
   if (fs.existsSync(file)) {
-    const [, rows] = JSON.parse(fs.readFileSync(file, 'utf8'));
-    for (const r of rows || []) {
-      if (r.value == null || !/^[A-Z]{3}$/.test(r.countryiso3code)) continue;
-      population.set(WB_CODE_FIX[r.countryiso3code] || r.countryiso3code, { v: r.value, y: Number(r.date) });
+    const { indicators } = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const [code, { values }] of Object.entries(indicators)) {
+      const key = code === 'SP.POP.TOTL' ? 'pop' : WB_FIELDS[code];
+      if (!key) continue;
+      for (const [iso, [v, y]] of Object.entries(values)) {
+        const c = WB_CODE_FIX[iso] || iso;
+        if (!worldBank.has(c)) worldBank.set(c, {});
+        // büyük sayıları yuvarla, oranları 2 basamağa indir: dosya küçük kalsın
+        worldBank.get(c)[key] = [Math.abs(v) >= 1000 ? Math.round(v) : Math.round(v * 100) / 100, y];
+      }
     }
   } else {
-    log('  ! worldbank-population.json yok — nüfus alanı boş kalacak');
+    log('  ! tools/raw/worldbank.json yok — `node tools/fetch-worldbank.mjs` çalıştırın');
   }
 }
 
@@ -310,8 +330,17 @@ for (const [code, { meta }] of [...shapes].sort((a, b) => (a[0] < b[0] ? -1 : 1)
     tel: phoneCode(meta.idd),
     tld: (meta.tld || [])[0] || null,
     sea: meta.landlocked === false,
-    pop: population.get(code)?.v ?? null,
-    popY: population.get(code)?.y ?? null,
+    pop: worldBank.get(code)?.pop?.[0] ?? null,
+    popY: worldBank.get(code)?.pop?.[1] ?? null,
+    wb: Object.fromEntries(Object.entries(worldBank.get(code) || {}).filter(([k]) => k !== 'pop')),
+    off: meta.name.official || null,
+    // yerel dillerdeki resmî adlar (İngilizceyle aynı olanlar hariç, tekrarsız)
+    nat: [...new Set(Object.values(meta.name.native || {}).map((n) => n.official))]
+      .filter((n) => n && n !== meta.name.official),
+    dem: meta.demonyms?.eng?.m || null,
+    un: meta.unMember === true,
+    ind: meta.independent === true,
+    ioc: meta.cioc || null,
   });
 }
 

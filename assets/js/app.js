@@ -431,9 +431,13 @@
             rota haritada çizilir.</li>
         <li><b>Bu rotayı oyna</b> o iki ülkeyle bir bulmaca başlatır — aradaki
             ülkeleri hatırlayabilecek misin?</li>
+        <li>Seçtiğin hedef ülke kara yolu olmasa da (ör. Japonya) iki ülke
+            <b>yan yana karşılaştırılır</b>; komşular da tabloda kıyaslanır.</li>
+        <li>Göstergelerin yanındaki sayı, veri olan ülkeler arasında büyükten
+            küçüğe <b>dünya sırasıdır</b>.</li>
       </ul>
-      <p>Bütün veri uygulamanın içinde; internet bağlantısı gerekmez. Nüfus:
-      Dünya Bankası, sınırlar ve diğer bilgiler: mledoze/countries.</p>
+      <p>Bütün veri uygulamanın içinde; internet bağlantısı gerekmez. Ekonomi ve
+      nüfus: Dünya Bankası, sınırlar ve diğer bilgiler: mledoze/countries.</p>
     `);
   }
 

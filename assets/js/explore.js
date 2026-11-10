@@ -52,6 +52,71 @@
     });
   }
 
+  /* ---------- Dünya Bankası göstergeleri ---------- */
+
+  const pct = (v) => '%' + nf1.format(v);
+  const money = (v) => {
+    if (v >= 1e12) return nf2.format(v / 1e12) + ' trilyon $';
+    if (v >= 1e9) return nf1.format(v / 1e9) + ' milyar $';
+    if (v >= 1e6) return nf1.format(v / 1e6) + ' milyon $';
+    return nf.format(Math.round(v)) + ' $';
+  };
+
+  /**
+   * good: 'up' = yüksek değer iyi, 'down' = düşük değer iyi, null = yorumsuz.
+   * cmp:  'ratio' = "2,1 kat", 'points' = "+12 puan" (yüzde göstergeleri için).
+   */
+  const METRICS = [
+    { key: 'gdpPc',  label: 'Kişi başı gelir',      fmt: (v) => money(v),               good: 'up',   cmp: 'ratio' },
+    { key: 'gdp',    label: 'GSYH',                 fmt: money,                         good: null,   cmp: 'ratio' },
+    { key: 'life',   label: 'Yaşam beklentisi',     fmt: (v) => nf1.format(v) + ' yıl', good: 'up',   cmp: 'years' },
+    { key: 'fert',   label: 'Doğurganlık',          fmt: (v) => nf2.format(v) + ' çocuk', good: null, cmp: 'ratio' },
+    { key: 'urban',  label: 'Kentli nüfus',         fmt: pct,                           good: null,   cmp: 'points' },
+    { key: 'unemp',  label: 'İşsizlik',             fmt: pct,                           good: 'down', cmp: 'points' },
+    { key: 'infl',   label: 'Enflasyon',            fmt: pct,                           good: 'down', cmp: 'points' },
+    { key: 'net',    label: 'İnternet kullanımı',   fmt: pct,                           good: 'up',   cmp: 'points' },
+    { key: 'co2',    label: 'Kişi başı CO₂',        fmt: (v) => nf1.format(v) + ' ton', good: null,   cmp: 'ratio' },
+    { key: 'forest', label: 'Orman alanı',          fmt: pct,                           good: null,   cmp: 'points' },
+    { key: 'tour',   label: 'Gelen turist',         fmt: (v) => formatPopulation(v),    good: null,   cmp: 'ratio' },
+  ];
+
+  /** Nüfus kartta ayrı duruyor ama karşılaştırmada ilk sırada. */
+  const POP_METRIC = { key: 'pop', label: 'Nüfus', fmt: formatPopulation, good: null, cmp: 'ratio' };
+
+  const metricValue = (c, key) => (key === 'pop' ? (c.pop != null ? [c.pop, c.popY] : null) : c.wb[key] || null);
+
+  /** key -> Map(code -> sıra), büyükten küçüğe (1 = en yüksek). */
+  const RANKS = new Map(
+    [POP_METRIC, ...METRICS].map(({ key }) => {
+      const ranked = H.all.filter((c) => metricValue(c, key)).sort((a, b) => metricValue(b, key)[0] - metricValue(a, key)[0]);
+      return [key, { size: ranked.length, pos: new Map(ranked.map((c, i) => [c.c, i + 1])) }];
+    })
+  );
+
+  /** "Almanya, Türkiye'nin 2,6 katı" gibi kısa not; tone = good/bad/'' */
+  function compareNote(m, a, b) {
+    const va = metricValue(a, m.key), vb = metricValue(b, m.key);
+    if (!va || !vb) return { text: '—', tone: '' };
+    const x = va[0], y = vb[0];
+    let text, dir; // dir: +1 a büyük, -1 a küçük, 0 benzer
+    if (m.cmp === 'points') {
+      const d = x - y;
+      dir = Math.abs(d) < 1 ? 0 : Math.sign(d);
+      text = dir === 0 ? 'benzer' : (d > 0 ? '+' : '−') + nf1.format(Math.abs(d)) + ' puan';
+    } else if (m.cmp === 'years') {
+      const d = x - y;
+      dir = Math.abs(d) < 0.5 ? 0 : Math.sign(d);
+      text = dir === 0 ? 'benzer' : (d > 0 ? '+' : '−') + nf1.format(Math.abs(d)) + ' yıl';
+    } else {
+      if (y <= 0 || x <= 0) return { text: '—', tone: '' };
+      const r = x / y;
+      dir = r > 1.1 ? 1 : r < 1 / 1.1 ? -1 : 0;
+      text = dir === 0 ? 'benzer' : dir > 0 ? nf1.format(r) + ' kat fazla' : nf1.format(1 / r) + ' kat az';
+    }
+    const tone = !m.good || dir === 0 ? '' : (dir > 0) === (m.good === 'up') ? 'good' : 'bad';
+    return { text, tone };
+  }
+
   /* ---------- otomatik tamamlama (arama + rota hedefi) ---------- */
 
   function autocomplete(input, list, onChoose, { exclude = () => false } = {}) {
@@ -178,9 +243,12 @@
     const badges = [
       !c.nb.length ? '<span class="ex-badge">kara sınırı yok</span>' : '',
       c.nb.length && !c.sea ? '<span class="ex-badge">denize kıyısı yok</span>' : '',
+      !c.ind ? '<span class="ex-badge muted">bağımsız değil</span>' : '',
+      c.ind && !c.un ? '<span class="ex-badge muted">BM üyesi değil</span>' : '',
     ].join('');
     const fact = (label, value, cls = '') =>
       `<div class="${cls}"><dt>${label}</dt><dd>${value}</dd></div>`;
+    const officialNames = [...c.nat, c.off].filter(Boolean);
 
     $('ex-card').innerHTML = `
       <article class="ex-country">
@@ -192,49 +260,133 @@
             ${badges ? `<div class="ex-badges">${badges}</div>` : ''}
           </div>
         </header>
+        ${officialNames.length ? `<p class="ex-official" title="Resmî ad">${officialNames.map(esc).join(' · ')}</p>` : ''}
         <dl class="ex-facts">
           ${fact('Başkent', esc(c.cap.join(', ') || '—'))}
-          ${fact('Nüfus', formatPopulation(c.pop) + (c.popY ? ` <small>${c.popY}</small>` : ''))}
+          ${fact('Nüfus', formatPopulation(c.pop) + (c.popY ? ` <small>${c.popY}</small>` : '') + rankTag('pop', c))}
           ${fact('Yüzölçümü', c.area ? nf.format(c.area) + ' km²' : '—')}
           ${fact('Yoğunluk', density)}
           ${fact('Diller', esc(languages(c).join(', ') || '—'), 'wide')}
           ${fact('Para birimi', esc(currencies(c).join(', ') || '—'), 'wide')}
+          ${fact('Halkın adı <em>(İng.)</em>', esc(c.dem || '—'))}
           ${fact('Telefon kodu', esc(c.tel || '—'))}
           ${fact('İnternet', esc(c.tld || '—'))}
+          ${fact('Olimpiyat kodu', esc(c.ioc || '—'))}
         </dl>
+        ${economyHTML(c)}
         <h3 class="ex-subhead">Kara komşuları <span>${c.nb.length}</span></h3>
         ${c.nb.length
-          ? `<div class="ex-chips">${[...c.nb].sort((a, b) => H.name(a).localeCompare(H.name(b), 'tr')).map(chip).join('')}</div>`
+          ? `<div class="ex-chips">${[...c.nb].sort((a, b) => H.name(a).localeCompare(H.name(b), 'tr')).map(chip).join('')}</div>
+             ${neighbourTableHTML(c)}`
           : `<p class="ex-note">${esc(c.tr)} ile kara sınırı paylaşan bir ülke yok.</p>`}
       </article>`;
 
-    $('ex-route').hidden = c.nb.length === 0;
+    $('ex-route').hidden = false;
     $('ex-from').innerHTML = `${ctx.flag(c.c)} <b>${esc(c.tr)}</b>`;
     renderRoute();
+  }
+
+  /** "dünyada 18." — veri olan ülkeler arasında büyükten küçüğe sıra */
+  function rankTag(key, c) {
+    const r = RANKS.get(key);
+    const pos = r && r.pos.get(c.c);
+    return pos ? ` <span class="ex-rank-tag" title="${r.size} ülke arasında">${pos}.</span>` : '';
+  }
+
+  function economyHTML(c) {
+    const rows = METRICS.filter((m) => c.wb[m.key]);
+    if (!rows.length) return '';
+    return `
+      <h3 class="ex-subhead">Ekonomi ve toplum <em>Dünya Bankası</em></h3>
+      <dl class="ex-stats">
+        ${rows.map((m) => {
+          const [v, y] = c.wb[m.key];
+          return `<div><dt>${m.label}</dt><dd>${m.fmt(v)} <small>${y}</small>${rankTag(m.key, c)}</dd></div>`;
+        }).join('')}
+      </dl>
+      <p class="ex-foot">Sağdaki sayı, veri olan ülkeler arasında büyükten küçüğe sıradır.</p>`;
+  }
+
+  /** Komşuları seçili ülkeyle üç temel göstergede karşılaştırır. */
+  function neighbourTableHTML(c) {
+    const cols = [POP_METRIC, METRICS[0], METRICS[2]]; // nüfus, kişi başı gelir, yaşam beklentisi
+    const nbs = c.nb.map((n) => H.get(n))
+      .sort((a, b) => ((metricValue(b, 'gdpPc') || [0])[0]) - ((metricValue(a, 'gdpPc') || [0])[0]));
+    const cell = (m, n) => {
+      const v = metricValue(n, m.key);
+      if (!v) return '<td>—</td>';
+      const note = compareNote(m, n, c);
+      return `<td>${m.fmt(v[0])}<small class="${note.tone}">${note.text}</small></td>`;
+    };
+    return `
+      <details class="ex-compare" open>
+        <summary>Komşularla karşılaştır <span>kıyas: ${esc(c.tr)}</span></summary>
+        <div class="ex-table-wrap"><table class="ex-table">
+          <thead><tr><th></th>${cols.map((m) => `<th>${m.label}</th>`).join('')}</tr></thead>
+          <tbody>
+            <tr class="is-self"><th>${ctx.flag(c.c)} ${esc(c.tr)}</th>${cols.map((m) => {
+              const v = metricValue(c, m.key);
+              return `<td>${v ? m.fmt(v[0]) : '—'}</td>`;
+            }).join('')}</tr>
+            ${nbs.map((n) => `<tr data-c="${n.c}"><th>${ctx.flag(n.c)} ${esc(n.tr)}</th>${cols.map((m) => cell(m, n)).join('')}</tr>`).join('')}
+          </tbody>
+        </table></div>
+      </details>`;
+  }
+
+  /** Rota hedefiyle yan yana karşılaştırma (kara yolu olmasa da çalışır). */
+  function pairCompareHTML(a, b) {
+    const rows = [POP_METRIC, ...METRICS].filter((m) => metricValue(a, m.key) || metricValue(b, m.key));
+    const val = (c, m) => { const v = metricValue(c, m.key); return v ? m.fmt(v[0]) : '—'; };
+    return `
+      <div class="ex-table-wrap"><table class="ex-table ex-pair">
+        <thead><tr><th></th>
+          <th><button type="button" class="ex-link" data-c="${a.c}">${ctx.flag(a.c)} ${esc(a.tr)}</button></th>
+          <th><button type="button" class="ex-link" data-c="${b.c}">${ctx.flag(b.c)} ${esc(b.tr)}</button></th>
+          <th title="${esc(b.tr)}, ${esc(a.tr)} ile kıyaslandığında">Fark</th></tr></thead>
+        <tbody>
+          <tr><th>Yüzölçümü</th><td>${a.area ? nf.format(a.area) + ' km²' : '—'}</td><td>${b.area ? nf.format(b.area) + ' km²' : '—'}</td>
+              <td>${areaNote(b, a)}</td></tr>
+          ${rows.map((m) => {
+            const note = compareNote(m, b, a);
+            return `<tr><th>${m.label}</th><td>${val(a, m)}</td><td>${val(b, m)}</td><td class="${note.tone}">${note.text}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`;
+  }
+
+  function areaNote(b, a) {
+    if (!a.area || !b.area) return '—';
+    const r = b.area / a.area;
+    return r > 1.1 ? nf1.format(r) + ' kat büyük' : r < 1 / 1.1 ? nf1.format(1 / r) + ' kat küçük' : 'benzer';
   }
 
   function renderRoute() {
     const out = $('ex-route-out');
     if (!route) { out.innerHTML = ''; return; }
-    if (!route.path) {
-      out.innerHTML = `<p class="ex-note">${esc(H.name(current))} ile ${esc(H.name(route.to))} arasında
-        kara yolu yok — farklı kıtalarda ya da adada.</p>`;
-      return;
-    }
-    const p = route.path;
-    const mids = p.length - 2;
-    out.innerHTML = `
-      <p class="ex-route-sum"><b>${p.length - 1}</b> sınır geçişi · arada <b>${mids}</b> ülke</p>
-      <ol class="ex-chain">
-        ${p.map((c, i) => `<li class="${i === 0 ? 'is-start' : i === p.length - 1 ? 'is-end' : ''}">
-          <button type="button" class="ex-link" data-c="${c}">${ctx.flag(c)} ${esc(H.name(c))}</button></li>`).join('')}
-      </ol>
-      <div class="ex-actions">
-        ${mids >= 1 ? '<button type="button" class="btn-primary" id="ex-play">Bu rotayı oyna</button>' : ''}
-        <button type="button" class="ghost" id="ex-clear">Rotayı kapat</button>
+    const a = H.get(current), b = H.get(route.to);
+    const compare = `<h3 class="ex-subhead ex-pair-head">Karşılaştırma</h3>${pairCompareHTML(a, b)}`;
+    const close = `<div class="ex-actions">
+        ${route.path && route.path.length >= 3 ? '<button type="button" class="btn-primary" id="ex-play">Bu rotayı oyna</button>' : ''}
+        <button type="button" class="ghost" id="ex-clear">Kapat</button>
       </div>`;
+
+    if (!route.path) {
+      out.innerHTML = `<p class="ex-note">${esc(a.tr)} ile ${esc(b.tr)} arasında
+        kara yolu yok — farklı kıtalarda ya da adada.</p>${compare}${close}`;
+    } else {
+      const p = route.path;
+      out.innerHTML = `
+        <p class="ex-route-sum"><b>${p.length - 1}</b> sınır geçişi · arada <b>${p.length - 2}</b> ülke</p>
+        <ol class="ex-chain">
+          ${p.map((c, i) => `<li class="${i === 0 ? 'is-start' : i === p.length - 1 ? 'is-end' : ''}">
+            <button type="button" class="ex-link" data-c="${c}">${ctx.flag(c)} ${esc(H.name(c))}</button></li>`).join('')}
+        </ol>
+        ${close}
+        ${compare}`;
+    }
     const play = $('ex-play');
-    if (play) play.addEventListener('click', () => ctx.playRoute(p[0], p[p.length - 1]));
+    if (play) play.addEventListener('click', () => ctx.playRoute(route.path[0], route.path[route.path.length - 1]));
     $('ex-clear').addEventListener('click', () => { route = null; renderRoute(); paint(); });
   }
 

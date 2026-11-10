@@ -844,6 +844,74 @@ input  { font: inherit; color: inherit; }
 
 #ex-card { flex: none; }
 
+/* Keşfet — resmî ad, göstergeler, karşılaştırma */
+.ex-official {
+  margin: -6px 0 14px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.ex-badge.muted { color: var(--muted); background: rgba(150,182,222,.07); border-color: rgba(150,182,222,.18); }
+.ex-facts dt em, .ex-subhead em { font-style: normal; text-transform: none; letter-spacing: .02em; color: var(--faint); font-weight: 400; }
+.ex-subhead em { margin-left: auto; font-size: 10px; }
+
+.ex-rank-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  font: 10.5px var(--font-mono);
+  color: var(--brass);
+  background: rgba(207,169,99,.1);
+  vertical-align: 1px;
+}
+
+.ex-stats { margin: 0 0 6px; display: grid; gap: 0; }
+.ex-stats > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px dashed rgba(150,182,222,.09);
+}
+.ex-stats dt { font-size: 12.5px; color: var(--muted); }
+.ex-stats dd { margin: 0; font-size: 13.5px; color: var(--text); text-align: right; white-space: nowrap; }
+.ex-stats dd small { color: var(--faint); font-size: 10px; margin-left: 4px; }
+.ex-foot { margin: 6px 0 16px; font-size: 10.5px; color: var(--faint); }
+
+.ex-compare { margin-top: 12px; }
+.ex-compare summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12.5px; color: var(--brass);
+  padding: 4px 0 8px;
+}
+.ex-compare summary::-webkit-details-marker { display: none; }
+.ex-compare summary::before { content: "▸"; transition: transform .18s; }
+.ex-compare[open] summary::before { transform: rotate(90deg); }
+.ex-compare summary span { color: var(--faint); font-size: 11px; }
+
+.ex-table-wrap { overflow-x: auto; margin: 0 -4px; }
+.ex-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ex-table th, .ex-table td { padding: 7px 6px; text-align: right; vertical-align: top; border-bottom: 1px solid rgba(150,182,222,.07); }
+.ex-table thead th { font: 600 9.5px var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.ex-table tbody th { text-align: left; font-weight: 500; color: var(--text); white-space: nowrap; }
+.ex-table td { color: var(--text); white-space: nowrap; }
+.ex-table td small { display: block; font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+.ex-table .good { color: #6fe0bf !important; }
+.ex-table .bad  { color: #f08f9c !important; }
+.ex-table tr.is-self th, .ex-table tr.is-self td { color: var(--brass); background: rgba(207,169,99,.06); }
+.ex-table tbody tr[data-c] { cursor: pointer; transition: background .14s; }
+.ex-table tbody tr[data-c]:hover { background: rgba(63,214,176,.06); }
+
+.ex-pair thead th { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.ex-pair thead .ex-link { white-space: nowrap; font-size: 12.5px; }
+.ex-pair thead th:last-child { color: var(--end); }
+.ex-pair tbody th { color: var(--muted); font-weight: 400; }
+.ex-pair td:last-child { color: var(--muted); font-size: 11.5px; }
+.ex-pair-head { margin-top: 14px; }
+
+
 @media (max-width: 1080px) {
   .stage { grid-template-columns: minmax(0,1fr) 320px; gap: 14px; padding: 14px; }
   .legend { display: none; }
