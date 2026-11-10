@@ -19,7 +19,13 @@
     btnHint: $('btn-hint'), btnRandom: $('btn-random'), btnGiveUp: $('btn-giveup'),
     btnHelp: $('btn-help'), btnStats: $('btn-stats'),
     modal: $('modal'), modalBody: $('modal-body'), modalClose: $('modal-close'),
+    panelGame: $('panel-game'), panelExplore: $('panel-explore'),
+    legendGame: $('legend'), legendExplore: $('legend-explore'),
+    tabs: document.querySelectorAll('.mode-tab'),
   };
+
+  const Explore = window.HudutExplore;
+  let mode = 'game';
 
   let game = null;
   let mapCtl = null;
@@ -330,6 +336,7 @@
   }
 
   function showResult() {
+    if (mode !== 'game') return; // gecikmeli açılış Keşfet'e geçildikten sonra gelebilir
     const s = game.state;
     const won = s.status === 'won';
     const path = won ? s.winPath : s.optimal;
@@ -379,6 +386,7 @@
   }
 
   function showHelp() {
+    if (mode === 'explore') { showExploreHelp(); return; }
     openModal(`
       <h2>Nasıl oynanır</h2>
       <p class="lede">Her gün iki ülke veriliyor. Aralarını <b>kara sınırlarıyla</b>
@@ -409,6 +417,23 @@
 
       <p style="margin-top:18px">Ceuta ve Melilla gibi haritada görünmeyen sınırlar
       oyun dışıdır: Afrika ile Avrasya arasındaki tek geçit <code>Mısır ↔ İsrail</code>.</p>
+    `);
+  }
+
+  function showExploreHelp() {
+    openModal(`
+      <h2>Keşfet</h2>
+      <p class="lede">Bir ülkeyi ara ya da haritada tıkla: başkent, nüfus, diller,
+      para birimi ve <b>kara komşuları</b> kartta, komşular haritada görünür.</p>
+      <ul>
+        <li>Komşu çiplerine tıklayarak ülkeden ülkeye gezebilirsin.</li>
+        <li><b>Kara yolu</b> bölümünde bir hedef seç: sınırlardan geçen en kısa
+            rota haritada çizilir.</li>
+        <li><b>Bu rotayı oyna</b> o iki ülkeyle bir bulmaca başlatır — aradaki
+            ülkeleri hatırlayabilecek misin?</li>
+      </ul>
+      <p>Bütün veri uygulamanın içinde; internet bağlantısı gerekmez. Nüfus:
+      Dünya Bankası, sınırlar ve diğer bilgiler: mledoze/countries.</p>
     `);
   }
 
@@ -456,6 +481,7 @@
       if (mode === 'in') mapCtl.zoomBy(1.6);
       else if (mode === 'out') mapCtl.zoomBy(1 / 1.6);
       else if (mode === 'world') mapCtl.resetView();
+      else if (mode === 'explore') Explore.focus();
       else mapCtl.focusOn([game.state.puzzle.start, game.state.puzzle.end]);
     });
   });
@@ -479,9 +505,59 @@
     else if (!('ontouchstart' in window)) ui.input.focus();
   }
 
+  /* ---------- modlar ---------- */
+
+  function setMode(next, { country } = {}) {
+    mode = next;
+    const explore = mode === 'explore';
+    document.body.dataset.mode = mode;
+    ui.panelGame.hidden = explore;
+    ui.panelExplore.hidden = !explore;
+    ui.legendGame.hidden = explore;
+    ui.legendExplore.hidden = !explore;
+    ui.btnStats.hidden = explore;
+    ui.tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.mode === mode)));
+    closeSuggestions();
+    disarm();
+
+    if (explore) {
+      Explore.activate(country);
+      return;
+    }
+    Explore.deactivate();
+    try { history.replaceState(null, '', location.pathname + location.search); } catch { /* file:// */ }
+    // oyun haritasını geri kur
+    mapCtl.decorate(game.state.puzzle.start, game.state.puzzle.end);
+    chainDrawn = false;
+    refresh();
+    mapCtl.focusOn([game.state.puzzle.start, game.state.puzzle.end]);
+  }
+
+  ui.tabs.forEach((t) => t.addEventListener('click', () => {
+    if (t.dataset.mode !== mode) setMode(t.dataset.mode);
+  }));
+
+  /** Keşfet'teki "Bu rotayı oyna": iki ülkeyle serbest bir bulmaca. */
+  function playRoute(start, end) {
+    setMode('game');
+    newGame({ start, end, seed: 0, dateKey: null, number: null, daily: false });
+    toast(`${H.name(start)} → ${H.name(end)}: aradaki ülkeleri bul!`, 'good');
+  }
+
   function boot() {
-    mapCtl = window.HudutMap.createMap(ui.map, ui.mapWrap, { tip: ui.tip, onPick });
+    mapCtl = window.HudutMap.createMap(ui.map, ui.mapWrap, {
+      tip: ui.tip,
+      onPick: (code) => (mode === 'explore' ? Explore.pick(code) : onPick(code)),
+    });
+    Explore.init({ map: mapCtl, flag: flagMarkup, iso2, toast, playRoute });
     newGame(H.dailyPuzzle());
+
+    // #kesfet veya #kesfet/TUR ile doğrudan keşfet modunda aç
+    const m = /^#kesfet(?:\/([A-Z]{3}))?$/.exec(location.hash);
+    if (m) {
+      setMode('explore', { country: m[1] });
+      return;
+    }
 
     if (!localStorage.getItem('hudut:seen')) {
       try { localStorage.setItem('hudut:seen', '1'); } catch { /* yoksay */ }

@@ -26,6 +26,7 @@
     // alt tarafta kimsenin oynamadığı devasa bir bantla dengesizleşiyor.
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const bounds = new Map();
+    const mainBounds = new Map();  // en büyük parçanın kutusu (odaklanma için)
     const centers = new Map();
 
     for (const f of features) {
@@ -34,7 +35,9 @@
       const code = f.properties.c;
       if (code) {
         bounds.set(code, b);
-        centers.set(code, largestPartCentroid(f));
+        const main = largestPart(f);
+        centers.set(code, geoPath.centroid(main));
+        mainBounds.set(code, geoPath.bounds(main));
       }
       if (code === 'ATA') continue;
       x0 = Math.min(x0, b[0][0]); y0 = Math.min(y0, b[0][1]);
@@ -43,16 +46,18 @@
 
     // Çok parçalı ülkelerde etiket/çizgi düğümü en büyük parçaya konsun,
     // yoksa Norveç'in adaları yüzünden etiket denizde kalıyor.
-    function largestPartCentroid(f) {
+    // Aynı parça odaklanmada da kullanılıyor: Fransa'nın kutusu Fransız
+    // Guyanası'nı da kapsadığı için harita Avrupa yerine Atlantik'e açılıyordu.
+    function largestPart(f) {
       const g = f.geometry;
-      if (g.type !== 'MultiPolygon') return geoPath.centroid(f);
+      if (g.type !== 'MultiPolygon') return f;
       let best = null, bestArea = -1;
       for (const poly of g.coordinates) {
         const part = { type: 'Polygon', coordinates: poly };
         const a = Math.abs(geoPath.area(part));
         if (a > bestArea) { bestArea = a; best = part; }
       }
-      return best ? geoPath.centroid(best) : geoPath.centroid(f);
+      return best || f;
     }
 
     const PAD = 6;
@@ -166,7 +171,7 @@
 
     /** Verilen ülkeleri rahatça içine alacak şekilde odaklan. */
     function focusOn(codes, { padding = 1.45, animate = true, maxK = 9 } = {}) {
-      const bs = codes.map((c) => bounds.get(c)).filter(Boolean);
+      const bs = codes.map((c) => mainBounds.get(c) || bounds.get(c)).filter(Boolean);
       if (!bs.length) return;
       const bx0 = Math.min(...bs.map((b) => b[0][0]));
       const by0 = Math.min(...bs.map((b) => b[0][1]));
@@ -274,14 +279,17 @@
 
     /* ---------- durum boyama ---------- */
 
-    const STATE_CLASSES = ['start', 'end', 'warm', 'cool', 'loose', 'solved'];
+    // oyun: start/end/warm/cool/loose/solved  ·  keşfet: sel/nb/onpath/faded
+    const STATE_CLASSES = ['start', 'end', 'warm', 'cool', 'loose', 'solved', 'sel', 'nb', 'onpath', 'faded'];
 
     /**
      * @param {Map<string,string>} states  ülke kodu -> durum sınıfı
      * @param {Set<string>} labels         adı yazılacak ülkeler
+     * @param {Set<string>} [tipNames]     üstüne gelince adı balonda gösterilecek ülkeler
+     *                                     (varsayılan: labels — oyunda cevapları saklamak için)
      */
-    function render(states, labels) {
-      revealed = labels;
+    function render(states, labels, tipNames = labels) {
+      revealed = tipNames;
       for (const [code, p] of shapes) {
         const s = states.get(code);
         p.classList.remove(...STATE_CLASSES);

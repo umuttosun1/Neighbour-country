@@ -3,6 +3,7 @@
  *
  * Girdi  : tools/raw/countries-50m.json   (Natural Earth 50m, TopoJSON)
  *          tools/raw/mledoze-countries.json (ülke adları + kara sınırları)
+ *          tools/raw/worldbank-population.json (Dünya Bankası SP.POP.TOTL, son yıl)
  * Çıktı  : assets/js/data/world.js      -> window.WORLD_TOPO
  *          assets/js/data/countries.js  -> window.COUNTRY_DATA
  *
@@ -149,6 +150,29 @@ const log = (...a) => console.log(...a);
 const topo = raw('countries-50m.json');
 const mledoze = raw('mledoze-countries.json');
 
+// Nüfus: https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=400&mrnev=1
+// Dünya Bankası Kosova için XKX kullanıyor; bizim veri setimizde UNK.
+const WB_CODE_FIX = { XKX: 'UNK' };
+const population = new Map();
+{
+  const file = path.join(ROOT, 'tools/raw/worldbank-population.json');
+  if (fs.existsSync(file)) {
+    const [, rows] = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const r of rows || []) {
+      if (r.value == null || !/^[A-Z]{3}$/.test(r.countryiso3code)) continue;
+      population.set(WB_CODE_FIX[r.countryiso3code] || r.countryiso3code, { v: r.value, y: Number(r.date) });
+    }
+  } else {
+    log('  ! worldbank-population.json yok — nüfus alanı boş kalacak');
+  }
+}
+
+/** "+9" + ["0"] -> "+90";  "+1" + ["201","202",...] -> "+1" */
+function phoneCode(idd) {
+  if (!idd?.root) return null;
+  return idd.suffixes?.length === 1 ? idd.root + idd.suffixes[0] : idd.root;
+}
+
 const byNumeric = new Map(mledoze.filter((c) => c.ccn3).map((c) => [String(c.ccn3), c]));
 const byAlpha3 = new Map(mledoze.map((c) => [c.cca3, c]));
 
@@ -278,10 +302,21 @@ for (const [code, { meta }] of [...shapes].sort((a, b) => (a[0] < b[0] ? -1 : 1)
       meta.unMember === true &&
       nb.length > 0 &&
       (meta.area || 0) >= MIN_ENDPOINT_AREA,
+    // Keşfet kartı için. Dil/para birimi adlarını tarayıcı Intl ile Türkçeleştiriyor.
+    cap: meta.capital || [],
+    lang: Object.keys(meta.languages || {}),
+    langEn: Object.values(meta.languages || {}),
+    cur: Object.entries(meta.currencies || {}).map(([k, v]) => [k, v.symbol || '', v.name || k]),
+    tel: phoneCode(meta.idd),
+    tld: (meta.tld || [])[0] || null,
+    sea: meta.landlocked === false,
+    pop: population.get(code)?.v ?? null,
+    popY: population.get(code)?.y ?? null,
   });
 }
 
 const endpoints = countries.filter((c) => c.end);
+log(`Nüfus verisi olan ülke: ${countries.filter((c) => c.pop != null).length} / ${countries.length}`);
 log(`Toplam ülke: ${countries.length}  |  başlangıç/hedef olabilecek: ${endpoints.length}`);
 
 /* ------------------------------------------------------------------ *
